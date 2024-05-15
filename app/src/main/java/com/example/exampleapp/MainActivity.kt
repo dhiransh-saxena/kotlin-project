@@ -1,70 +1,67 @@
 package com.example.exampleapp
+
 import android.os.Bundle
 import android.view.View
-import android.view.ViewGroup
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
-import android.widget.ListView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import android.widget.*
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 
 class MainActivity : AppCompatActivity() {
 
-    private val items = ArrayList<String>()
-    private lateinit var adapter: ArrayAdapter<String>
-    private lateinit var listView: ListView
+    private lateinit var dbHelper: DatabaseHelper
+    private lateinit var adapter: MyRecyclerAdapter
+    private lateinit var recyclerView: RecyclerView
     private lateinit var noContentTextView: TextView
     private lateinit var myTextField: EditText
     private lateinit var button1: Button
     private lateinit var button2: Button
-
+    private var lastSelectedPosition = RecyclerView.NO_POSITION
+    private var items = mutableListOf<DataItem>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        dbHelper = DatabaseHelper(this)
+        items = dbHelper.getAllItems().mapIndexed { index, item -> DataItem(index.toLong(), item) }.toMutableList()
+
         myTextField = findViewById(R.id.myTextField)
         button1 = findViewById(R.id.button1)
         button2 = findViewById(R.id.button2)
-        listView = findViewById(R.id.listView)
+        recyclerView = findViewById(R.id.recyclerView)
         noContentTextView = findViewById(R.id.noContentTextView)
 
-        adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, items) {
-            override fun getCount(): Int {
-                return super.getCount().coerceAtLeast(1)
+        adapter = MyRecyclerAdapter(items, object : MyRecyclerAdapter.OnItemClickListener {
+            override fun onItemClick(position: Int) {
+                val selectedItem = items[position].item
+                myTextField.setText(selectedItem)
+                button1.text = "Edit"
+                button2.text = "Delete"
+                lastSelectedPosition = position
             }
+        })
 
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                return super.getView(position, convertView, parent)
-            }
-        }
-
-        var lastSelectedPosition = ListView.INVALID_POSITION
-
-        listView.adapter = adapter
-
-        listView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
-            val selectedItem = items[position]
-            myTextField.setText(selectedItem)
-            button1.text = "Edit"
-            button2.text = "Delete"
-            lastSelectedPosition = position
-        }
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.adapter = adapter
 
         button1.setOnClickListener {
             val text = myTextField.text.toString()
             if (text.isNotEmpty()) {
-
                 if (button1.text == "Submit") {
-                    items.add(text)
+                    val id = dbHelper.addItem(text)
+                    items.add(DataItem(id, text))
                 } else if (button1.text == "Edit") {
                     val position = lastSelectedPosition
-                    if (position != ListView.INVALID_POSITION) {
-                        items[position] = text
-                        adapter.notifyDataSetChanged()
-                        listView.clearChoices()
+                    if (position != RecyclerView.NO_POSITION) {
+                        val item = items[position]
+                        dbHelper.updateItem(item.id, text)
+                        items[position] = item.copy(item = text)
+                        adapter.notifyItemChanged(position)
+                        recyclerView.clearFocus()
                     }
                 }
                 updateListVisibility()
@@ -72,13 +69,9 @@ class MainActivity : AppCompatActivity() {
                 myTextField.text.clear()
                 button1.text = "Submit"
                 button2.text = "Clear"
-
-            }else{
-
+            } else {
                 Toast.makeText(this, "Input cannot be empty", Toast.LENGTH_SHORT).show()
-
             }
-
         }
 
         button2.setOnClickListener {
@@ -86,9 +79,12 @@ class MainActivity : AppCompatActivity() {
                 myTextField.text.clear()
             } else if (button2.text == "Delete") {
                 val position = lastSelectedPosition
-                if (position != ListView.INVALID_POSITION) {
+                if (position != RecyclerView.NO_POSITION) {
+                    val item = items[position]
+                    dbHelper.deleteItem(item.id)
                     items.removeAt(position)
-                    listView.clearChoices()
+                    adapter.notifyItemRemoved(position)
+                    recyclerView.clearFocus()
                 }
             }
             updateListVisibility()
@@ -103,10 +99,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateListVisibility() {
         if (items.isEmpty()) {
-            listView.visibility = View.GONE
+            recyclerView.visibility = View.GONE
             noContentTextView.visibility = View.VISIBLE
         } else {
-            listView.visibility = View.VISIBLE
+            recyclerView.visibility = View.VISIBLE
             noContentTextView.visibility = View.GONE
         }
     }
